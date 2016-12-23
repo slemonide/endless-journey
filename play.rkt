@@ -224,9 +224,6 @@
 
 ;; Images
 (define PLAYER-IMG (bitmap "graphics/player.png"))
-(define FLOOR-TOP-IMG (bitmap "graphics/floor-top.png"))
-(define FLOOR-MIDDLE-IMG (bitmap "graphics/floor-middle.png"))
-(define FLOOR-BOTTOM-IMG (bitmap "graphics/floor-bottom.png"))
 (define WALL-IMG (bitmap "graphics/wall.png"))
 (define LADDER-IMG (bitmap "graphics/ladder.png"))
 (define URAMP-LEFT (bitmap "graphics/ramp-left.png"))
