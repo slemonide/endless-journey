@@ -221,9 +221,9 @@
 (define SHADE (square SIZE 120 "black"))
 (define NODE-IMG (square SIZE "solid" "blue"))
 ;; HEIGHT and WIDTH are measured in chunks of SIZE pixels
-(define HEIGHT (quotient (* 4 32) SIZE))
-(define WIDTH (quotient (* 4 32) SIZE))
-(define MTS (rectangle (* WIDTH SIZE) (* HEIGHT SIZE) 0 "white"))
+(define HEIGHT (quotient 600 SIZE))
+(define WIDTH (quotient 800 SIZE))
+(define MTS (rectangle (* WIDTH SIZE) (* HEIGHT SIZE) 0 "black"))
 (define CTR (pos (quotient WIDTH 2) (quotient HEIGHT 2) 0))
 
 ;; Images
@@ -306,73 +306,72 @@
   ;; visited: (listof Pos); list of positions of containers already traversed
 
   ;; parent: (Parent) Container; container leading to the current container
-  (local [(struct wle (child parent path child-pos))
-          ;; WLE (Worklist Entry) is (wle Container Container Pos Pos)
+  (local [(struct wle (child parent path))
+          ;; WLE (Worklist Entry) is (wle Container Container Pos Pos (hashof Pos . Container))
           ;; interp. a worklist entry
           ;;  - child is the current node
           ;;  - parent is the previous node
           ;;  - path is the path so far
-          ;;  - child-pos is child's position relative to the parent
-          (define (grow-world cont path parent child-pos todo visited)
+          (define (grow-world cont path parent todo visited hash)
             (cond [(or (and (not (false? cont))
                             (cube? (container-contents cont)))
                        (not (pos-on-screen? path))
                        (member path visited))
-                   (grow-world/todo todo visited)]
+                   (grow-world/todo todo visited hash)]
                   [(false? cont)
-                   (define new-cont (build-container parent child-pos))
+                   (define new-cont (build-container parent path hash))
                    (define children
                      (list (wle (node-n new-cont) new-cont
-                                (move-pos path  0 -1  0) (move-pos CTR  0 -1  0))
+                                (move-pos path  0 -1  0))
                            (wle (node-s new-cont) new-cont
-                                (move-pos path  0  1  0) (move-pos CTR  0  1  0))
+                                (move-pos path  0  1  0))
                            (wle (node-e new-cont) new-cont
-                                (move-pos path  1  0  0) (move-pos CTR  1  0  0))
+                                (move-pos path  1  0  0))
                            (wle (node-w new-cont) new-cont
-                                (move-pos path -1  0  0) (move-pos CTR -1  0  0))
+                                (move-pos path -1  0  0))
                            (wle (node-u new-cont) new-cont
-                                (move-pos path  0  0 -1) (move-pos CTR  0  0 -1))
+                                (move-pos path  0  0 -1))
                            (wle (node-d new-cont) new-cont
-                                (move-pos path  0  0  1) (move-pos CTR  0  0  1))))
-                   (grow-world/todo (append todo children) (cons path visited))]
+                                (move-pos path  0  0  1))))
+                   (grow-world/todo (append todo children) (cons path visited) hash)]
                   [else
                    (define children
                      (list (wle (node-n cont) cont
-                                (move-pos path  0 -1  0) (move-pos CTR 0 -1  0))
+                                (move-pos path  0 -1  0))
                            (wle (node-s cont) cont
-                                (move-pos path  0  1  0) (move-pos CTR  0  1  0))
+                                (move-pos path  0  1  0))
                            (wle (node-e cont) cont
-                                (move-pos path  1  0  0) (move-pos CTR  1  0  0))
+                                (move-pos path  1  0  0))
                            (wle (node-w cont) cont
-                                (move-pos path -1  0  0) (move-pos CTR -1  0  0))
+                                (move-pos path -1  0  0))
                            (wle (node-u cont) cont
-                                (move-pos path  0  0 -1) (move-pos CTR  0  0 -1))
+                                (move-pos path  0  0 -1))
                            (wle (node-d cont) cont
-                                (move-pos path  0  0  1) (move-pos CTR  0  0  1))))
-                   (grow-world/todo (append todo children) (cons path visited))]))
+                                (move-pos path  0  0  1))))
+                   (grow-world/todo (append todo children) (cons path visited) hash)]))
 
-          (define (grow-world/todo todo visited)
+          (define (grow-world/todo todo visited hash)
             (cond [(empty? todo) c0]
                   [else
                    (define fst (first todo))
                    (define child (wle-child fst))
                    (define path (wle-path fst))
                    (define parent (wle-parent fst))
-                   (define child-pos (wle-child-pos fst))
-                   (grow-world child path parent child-pos (rest todo) visited)]))
+                   (grow-world child path parent (rest todo) visited hash)]))
 
           ;; Parent Pos Path -> Container
           ;; put something on the place of container, connecting it to
           ;; the nearby containers and connecting them to the new container
           ;; child-pos is the child's relative position to the parent
-          (define (build-container parent child-pos)
+          (define (build-container parent child-pos hash)
             ;; template as search and random choice
-            (define world (graph-refs parent (set (move-pos child-pos  0 -1  0)
-                                                  (move-pos child-pos  0  1  0)
-                                                  (move-pos child-pos  1  0  0)
-                                                  (move-pos child-pos -1  0  0)
-                                                  (move-pos child-pos  0  0 -1)
-                                                  (move-pos child-pos  0  0  1))))
+            (define world (graph-refs parent CTR (set (move-pos child-pos  0 -1  0)
+                                                      (move-pos child-pos  0  1  0)
+                                                      (move-pos child-pos  1  0  0)
+                                                      (move-pos child-pos -1  0  0)
+                                                      (move-pos child-pos  0  0 -1)
+                                                      (move-pos child-pos  0  0  1))
+                                      hash))
             (define n-node (hash-ref world (move-pos child-pos  0 -1  0) #f))
             (define s-node (hash-ref world (move-pos child-pos  0  1  0) #f))
             (define e-node (hash-ref world (move-pos child-pos  1  0  0) #f))
@@ -397,7 +396,7 @@
           (define (safe-set setter a b)
             (when (not (false? a))
               (setter a b)))]
-    (grow-world c0 CTR #f (pos 0 0 0) (list) (list))))
+    (grow-world c0 CTR #f (list) (list) (hash))))
 
 ;; =============================================================================
 ;; Rendering:
@@ -554,10 +553,10 @@
                    (fn-for-container cont path (rest todo) visited)]))]
     (fn-for-container ctr CTR (list) (list))))
 
-;; Container (setof Pos) -> (hashof Pos . Container)
+;; Container Pos (setof Pos) (hashof Pos . Container) -> (hashof Pos . Container)
 ;; given a central node in a network, return the nodes at the requested positions
-;; positions are measured relative to the ctr
-(define (graph-refs ctr sop)
+;; positions are measured relative to the start
+(define (graph-refs ctr start sop hash)
   ;; template as graph traversal + rsf,
   ;; and compound todo accumulators
   ;; all encapsulated
@@ -589,7 +588,7 @@
                    (define cont (car fst))
                    (define path (cdr fst))
                    (fn-for-container cont sop path (rest todo) rsf)]))]
-    (fn-for-container ctr sop CTR (list) (hash))))
+    (fn-for-container ctr sop start (list) hash)))
 
 ;; =============================================================================
 ;; Tests:
@@ -761,19 +760,21 @@
   (check-equal? (graph-ref nodes+ (move-pos CTR  1  1 0)) #f)
 
   (define p0 (pos 0 0 0))
-  #|
-  (check-equal? (graph-refs single-cont1 (set p0)) (hash p0 single-cont1))
-  (check-equal? (graph-refs single-cont2 (set p0)) (hash p0 single-cont2))
-  (check-equal? (graph-refs nodes+ (set p0)) (hash p0 nodes+))
-  (check-equal? (hash-ref (graph-refs nodes+ (set (pos  1  0 0)))
+  (check-equal? (graph-refs single-cont1 p0 (set p0) (hash))
+                (hash p0 single-cont1))
+  (check-equal? (graph-refs single-cont2 p0 (set p0) (hash))
+                (hash p0 single-cont2))
+  (check-equal? (graph-refs nodes+ p0 (set p0) (hash))
+                (hash p0 nodes+))
+  (check-equal? (hash-ref (graph-refs nodes+ p0 (set (pos  1  0 0)) (hash))
                           (pos 1 0 0))
                 (node-e nodes+))
-  (check-false (hash-has-key? (graph-refs nodes+ (set (pos  1  3 0)))
+  (check-false (hash-has-key? (graph-refs nodes+ p0 (set (pos  1  3 0)) (hash))
                               (pos 1 3 0)))
   (check-true (<= 3 (length (hash-keys
-                             (graph-refs nodes+ (set (pos -1  0 0)
-                                                     (pos  0  1 0)
-                                                     (pos  0 -1 0)
-                                                     (pos  1  1 0)))))))
-  |#
+                             (graph-refs nodes+ p0 (set (pos -1  0 0)
+                                                        (pos  0  1 0)
+                                                        (pos  0 -1 0)
+                                                        (pos  1  1 0))
+                                         (hash))))))
   "all tests run")
