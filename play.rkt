@@ -221,8 +221,8 @@
 (define SHADE (square SIZE 120 "black"))
 (define NODE-IMG (square SIZE "solid" "blue"))
 ;; HEIGHT and WIDTH are measured in chunks of SIZE pixels
-(define HEIGHT (quotient (* 10 32) SIZE))
-(define WIDTH (quotient (* 10 32) SIZE))
+(define HEIGHT (quotient 600 SIZE))
+(define WIDTH (quotient 800 SIZE))
 (define MTS (rectangle (* WIDTH SIZE) (* HEIGHT SIZE) 0 "white"))
 (define CTR (pos (quotient WIDTH 2) (quotient HEIGHT 2) 0))
 
@@ -299,54 +299,78 @@
   ;; template as graph traversal with todo and visited accumulators
   ;; and a mutable rsf accumulator (c0)
 
-  ;; todo: (listof (Container . Pos)); containers to be traversed
-  ;;                                   and their positions on the screen
+  ;; todo: (listof WLE); containers to be traversed
+  ;;                     and their relative positions due to the parents
   ;; visited: (listof Pos); list of positions of containers already traversed
-  (local [(define (grow-world cont path todo visited)
+
+  ;; parent: (Parent) Container; container leading to the current container
+  (local [(struct wle (child parent path child-pos))
+          ;; WLE (Worklist Entry) is (wle Container Container Pos Pos)
+          ;; interp. a worklist entry
+          ;;  - child is the current node
+          ;;  - parent is the previous node
+          ;;  - path is the path so far
+          ;;  - child-pos is child's position relative to the parent
+          (define (grow-world cont path parent child-pos todo visited)
             (cond [(or (and (not (false? cont))
                             (cube? (container-contents cont)))
                        (not (pos-on-screen? path))
                        (member path visited))
                    (grow-world/todo todo visited)]
                   [(false? cont)
-                   (define new-cont (build-container path))
+                   (define new-cont (build-container parent child-pos))
                    (define children
-                     (list (cons (node-n new-cont) (move-pos path  0 -1  0))
-                           (cons (node-s new-cont) (move-pos path  0  1  0))
-                           (cons (node-e new-cont) (move-pos path  1  0  0))
-                           (cons (node-w new-cont) (move-pos path -1  0  0))
-                           (cons (node-u new-cont) (move-pos path  0  0 -1))
-                           (cons (node-d new-cont) (move-pos path  0  0  1))))
+                     (list (wle (node-n new-cont) new-cont
+                                (move-pos path  0 -1  0) (move-pos CTR  0 -1  0))
+                           (wle (node-s new-cont) new-cont
+                                (move-pos path  0  1  0) (move-pos CTR  0  1  0))
+                           (wle (node-e new-cont) new-cont
+                                (move-pos path  1  0  0) (move-pos CTR  1  0  0))
+                           (wle (node-w new-cont) new-cont
+                                (move-pos path -1  0  0) (move-pos CTR -1  0  0))
+                           (wle (node-u new-cont) new-cont
+                                (move-pos path  0  0 -1) (move-pos CTR  0  0 -1))
+                           (wle (node-d new-cont) new-cont
+                                (move-pos path  0  0  1) (move-pos CTR  0  0  1))))
                    (grow-world/todo (append todo children) (cons path visited))]
                   [else
                    (define children
-                     (list (cons (node-n cont) (move-pos path  0 -1  0))
-                           (cons (node-s cont) (move-pos path  0  1  0))
-                           (cons (node-e cont) (move-pos path  1  0  0))
-                           (cons (node-w cont) (move-pos path -1  0  0))
-                           (cons (node-u cont) (move-pos path  0  0 -1))
-                           (cons (node-d cont) (move-pos path  0  0  1))))
+                     (list (wle (node-n cont) cont
+                                (move-pos path  0 -1  0) (move-pos CTR 0 -1  0))
+                           (wle (node-s cont) cont
+                                (move-pos path  0  1  0) (move-pos CTR  0  1  0))
+                           (wle (node-e cont) cont
+                                (move-pos path  1  0  0) (move-pos CTR  1  0  0))
+                           (wle (node-w cont) cont
+                                (move-pos path -1  0  0) (move-pos CTR -1  0  0))
+                           (wle (node-u cont) cont
+                                (move-pos path  0  0 -1) (move-pos CTR  0  0 -1))
+                           (wle (node-d cont) cont
+                                (move-pos path  0  0  1) (move-pos CTR  0  0  1))))
                    (grow-world/todo (append todo children) (cons path visited))]))
 
           (define (grow-world/todo todo visited)
             (cond [(empty? todo) c0]
                   [else
                    (define fst (first todo))
-                   (define cont (car fst))
-                   (define path (cdr fst))
-                   (grow-world cont path (rest todo) visited)]))
+                   (define child (wle-child fst))
+                   (define path (wle-path fst))
+                   (define parent (wle-parent fst))
+                   (define child-pos (wle-child-pos fst))
+                   (grow-world child path parent child-pos (rest todo) visited)]))
 
-          ;; Path -> Container
+          ;; Parent Pos Path -> Container
           ;; put something on the place of container, connecting it to
           ;; the nearby containers and connecting them to the new container
-          (define (build-container path)
+          ;; child-pos is the child's relative position to the parent
+          (define (build-container parent child-pos)
             ;; template as search and random choice
-            (define n-node (graph-ref c0 (move-pos path  0 -1  0)))
-            (define s-node (graph-ref c0 (move-pos path  0  1  0)))
-            (define e-node (graph-ref c0 (move-pos path  1  0  0)))
-            (define w-node (graph-ref c0 (move-pos path -1  0  0)))
-            (define u-node (graph-ref c0 (move-pos path  0  0 -1)))
-            (define d-node (graph-ref c0 (move-pos path  0  0  1)))
+            (define n-node (graph-ref parent (move-pos child-pos  0 -1  0)))
+            (define s-node (graph-ref parent (move-pos child-pos  0  1  0)))
+            (define e-node (graph-ref parent (move-pos child-pos  1  0  0)))
+            (define w-node (graph-ref parent (move-pos child-pos -1  0  0)))
+            (define u-node (graph-ref parent (move-pos child-pos  0  0 -1)))
+            (define d-node (graph-ref parent (move-pos child-pos  0  0  1)))
             (define contents (if (= (random BLOCK-CHANCE) 0)
                                  (cube WALL-IMG)
                                  #f))
@@ -365,7 +389,7 @@
           (define (safe-set setter a b)
             (when (not (false? a))
               (setter a b)))]
-    (grow-world c0 CTR (list) (list))))
+    (grow-world c0 CTR #f (pos 0 0 0) (list) (list))))
 
 ;; =============================================================================
 ;; Rendering:
@@ -529,7 +553,7 @@
 ;(define c0 (container #f #f #f #f #f #f (entity PLAYER-IMG)))
 ;(build-container (move-pos CTR 0 0 -1))
 ;(render-container c0)
-
+#;
 (module+ test
   (require rackunit)
 
@@ -565,14 +589,17 @@
 
   ;; World Generation
 
-  (check-equal? (grow-world single-cont1) single-cont1)
-  (check-not-false (node-n (grow-world single-cont2)))
-  (check-not-false (node-s (grow-world single-cont2)))
-  (check-not-false (node-e (grow-world single-cont2)))
-  (check-not-false (node-w (grow-world single-cont2)))
-  (check-not-false (node-u (grow-world single-cont2)))
-  (check-not-false (node-d (grow-world single-cont2)))
-  (check-equal? (grow-world nodes+) nodes+)
+  (let ([grown1 (grow-world (struct-copy container single-cont1))]
+        [grown2 (grow-world (struct-copy container single-cont2))]
+        [cross (grow-world (struct-copy container nodes+))])
+    (check-equal? grown1 single-cont1)
+    (check-equal? cross nodes+)
+    (check-not-false (node-n grown2))
+    (check-not-false (node-s grown2))
+    (check-not-false (node-e grown2))
+    (check-not-false (node-w grown2))
+    (check-not-false (node-u grown2))
+    (check-not-false (node-d grown2)))
 
   #|
   ;; initialize-world
